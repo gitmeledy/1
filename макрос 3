@@ -1,0 +1,67 @@
+Sub ExtractImagesFromDocxArchive()
+    Dim doc As Document
+    Dim docPath As String, docName As String
+    Dim docxPath As String, zipPath As String
+    Dim extractFolder As String
+    Dim fso As Object, shellApp As Object
+    
+    ' Убедимся, что документ сохранён
+    If ActiveDocument.Path = "" Then
+        MsgBox "Сначала сохраните документ на диск.", vbExclamation
+        Exit Sub
+    End If
+    
+    Set doc = ActiveDocument
+    docPath = doc.Path
+    docName = Left(doc.Name, InStrRev(doc.Name, ".") - 1)
+    
+    docxPath = docPath & "\" & docName & "_for_extract.docx"
+    zipPath = docPath & "\" & docName & "_for_extract.zip"
+    extractFolder = "C:\макросы\картинки\" ' Измените при необходимости
+    
+    If Dir(extractFolder, vbDirectory) = "" Then MkDir extractFolder
+    
+    ' Сохраняем копию как .docx
+    doc.SaveAs2 FileName:=docxPath, FileFormat:=wdFormatXMLDocument
+    
+    ' Копируем .docx как .zip
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If fso.FileExists(zipPath) Then fso.DeleteFile zipPath
+    fso.CopyFile docxPath, zipPath
+
+    ' Распаковка word\media
+    Set shellApp = CreateObject("Shell.Application")
+    Dim zipFolder As Object
+    Set zipFolder = shellApp.NameSpace(zipPath)
+    
+    If zipFolder Is Nothing Then
+        MsgBox "Не удалось открыть zip-файл.", vbCritical
+        Exit Sub
+    End If
+    
+    Dim item As Object, mediaFolderPath As String
+    mediaFolderPath = ""
+    
+    ' Ищем папку media внутри word
+    For Each item In zipFolder.Items
+        If item.IsFolder And LCase(item.Name) = "word" Then
+            Dim subFolder As Object
+            For Each subFolder In item.GetFolder.Items
+                If subFolder.IsFolder And LCase(subFolder.Name) = "media" Then
+                    mediaFolderPath = subFolder.Path
+                    Exit For
+                End If
+            Next
+        End If
+    Next
+    
+    If mediaFolderPath = "" Then
+        MsgBox "В документе нет встроенных изображений (word\media не найдена).", vbInformation
+        Exit Sub
+    End If
+    
+    ' Копируем содержимое media
+    shellApp.NameSpace(extractFolder).CopyHere shellApp.NameSpace(mediaFolderPath).Items
+    
+    MsgBox "Изображения успешно извлечены в: " & extractFolder, vbInformation
+End Sub
